@@ -80,22 +80,32 @@
 
 ## Try in 2 minutes
 
-> **Three steps: `clone → set a secret key → docker compose up`.** On macOS/Linux it's **one line**. Most of this README is reference — new users don't need to read it to get started.
+> **Lightest path: pull images, start the stack — no `npm`, no Vue source folder, and no `docker compose up --build`.** The UI comes from GHCR (`quantdinger-frontend:3.0.10` by default); only the backend is built locally on first boot.
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Compose (Docker Desktop on Windows/macOS, or Docker Engine + Compose plugin on Linux), and **Git**. Node.js is **not** required — the frontend is pulled as a prebuilt image from GHCR.
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) with Compose v2 (Docker Desktop on Windows/macOS). **Git** for the standard path below. **Node.js is not required.**
 
-### macOS / Linux (Bash) — one line
+### Lightest: two files only (no `git clone`)
+
+If you only need a running stack and can reach GHCR + Docker Hub (or a mirror):
 
 ```bash
-git clone https://github.com/brokermr810/QuantDinger.git && cd QuantDinger && cp backend_api_python/env.example backend_api_python/.env && chmod +x scripts/generate-secret-key.sh && ./scripts/generate-secret-key.sh && docker-compose up -d --build
+curl -O https://raw.githubusercontent.com/brokermr810/QuantDinger/main/docker-compose.ghcr.yml
+curl -o backend.env https://raw.githubusercontent.com/brokermr810/QuantDinger/main/backend_api_python/env.example
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-If `docker-compose` is not found, try `docker compose` (Compose V2).
+`SECRET_KEY` is auto-generated on first backend start. Open **`http://localhost:8888`**.
 
-<details>
-<summary><b>Windows (PowerShell)</b> — click to expand</summary>
+### Standard: clone this repo (recommended for config & docs)
 
-Use **PowerShell** (not CMD) in a folder where you want the project. **Docker Desktop** must be running (WSL2 backend recommended).
+**macOS / Linux (Bash) — one line**
+
+```bash
+git clone https://github.com/brokermr810/QuantDinger.git && cd QuantDinger && cp backend_api_python/env.example backend_api_python/.env && chmod +x scripts/generate-secret-key.sh && ./scripts/generate-secret-key.sh && docker compose pull && docker compose up -d
+```
+
+**Windows (PowerShell)** — folder name after clone is **`QuantDinger`** (same spelling as the GitHub repo; `cd quantdinger` also works on Windows when case-insensitive):
 
 ```powershell
 git clone https://github.com/brokermr810/QuantDinger.git
@@ -104,22 +114,45 @@ Copy-Item backend_api_python\env.example -Destination backend_api_python\.env
 $key = & python -c "import secrets; print(secrets.token_hex(32))" 2>$null
 if (-not $key) { $key = & py -c "import secrets; print(secrets.token_hex(32))" 2>$null }
 if (-not $key) { $key = & python3 -c "import secrets; print(secrets.token_hex(32))" 2>$null }
-if (-not $key) { Write-Error "Install Python 3 from python.org (tick 'Add to PATH') or use Git Bash with the macOS/Linux block above." }
+if (-not $key) { Write-Error "Install Python 3 from python.org (tick 'Add to PATH') or use Git Bash with the Bash one-liner above." }
 (Get-Content backend_api_python\.env) -replace '^SECRET_KEY=.*$', "SECRET_KEY=$key" | Set-Content backend_api_python\.env -Encoding utf8
-docker-compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-If `docker-compose` is not recognized, use **`docker compose`** (space, no hyphen). If Git is missing, install [Git for Windows](https://git-scm.com/download/win).
+Use **`docker compose`** (space). Legacy **`docker-compose`** (hyphen) works on many installs. **Git Bash** can run the Bash one-liner as-is.
 
-**Easier alternative:** if you installed **Git for Windows**, open **Git Bash** and just run the macOS/Linux one-liner above.
+<details>
+<summary><b>Do not use <code>docker compose up --build</code> for a normal install</b></summary>
+
+`--build` forces a **frontend** build from `./QuantDinger-Vue/`. That directory is **not** shipped in this repo — you will see `QuantDinger-Vue not found` or extra pulls for `node:18-alpine`.
+
+| Goal | Command |
+|------|---------|
+| First-time / routine start | `docker compose pull` then `docker compose up -d` |
+| Rebuild **backend** only after code changes | `docker compose up -d --build backend` |
+| Hack on Vue UI from source | Clone [QuantDinger-Vue](https://github.com/brokermr810/QuantDinger-Vue) into `./QuantDinger-Vue/`, then `docker compose up -d --build` |
+
+</details>
+
+<details>
+<summary><b>Slow or failed <code>docker pull</code> (China / VPN)</b></summary>
+
+System VPN often **does not** proxy Docker Desktop. Either configure **Docker Desktop → Settings → Proxies** (e.g. `http://127.0.0.1:7890` for Clash), or add to a **repository-root** `.env`:
+
+```ini
+IMAGE_PREFIX=docker.m.daocloud.io/library/
+```
+
+Then run `docker compose pull` again. Errors like `content size of zero` or `connectex` on `registry-1.docker.io` are registry/network issues, not application bugs.
 
 </details>
 
 ---
 
-Then open **`http://localhost:8888`**, sign in with **`quantdinger` / `123456`**, and **change the default admin password** before any real use. That's it — go play.
+Then open **`http://localhost:8888`**, sign in with **`quantdinger` / `123456`**, and **change the default admin password** before any real use.
 
-For deeper configuration, first-run checks, and troubleshooting, see **[Installation & first-time setup](#installation--first-time-setup-docker-compose)** further down (everyone else can skip it).
+For step-by-step detail and troubleshooting, see **[Installation & first-time setup](#installation--first-time-setup-docker-compose)**.
 
 ## Related repositories
 
@@ -315,18 +348,24 @@ The script overwrites the `SECRET_KEY=` line in `backend_api_python/.env` using 
 ### 4) Start the stack
 
 ```bash
-docker-compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-Services: **`postgres`**, **`redis`**, **`backend`**, **`frontend`** (see `docker-compose.yml` for healthchecks and port mappings).
+- **`frontend`** — pulls `ghcr.io/brokermr810/quantdinger-frontend:3.0.10` (no local Vue tree required).
+- **`backend`** — built from `./backend_api_python` on first start if no local image exists yet.
+- Do **not** run `docker compose up -d --build` unless you have cloned **QuantDinger-Vue** into `./QuantDinger-Vue/` for UI development.
 
-#### Alternative: zero-repo install from GHCR
+Services: **`postgres`**, **`redis`**, **`backend`**, **`frontend`** (see `docker-compose.yml`).
 
-If you do not want to clone the repository, the GHCR variant pulls prebuilt multi-arch (amd64/arm64) images for both backend and frontend:
+#### Alternative: zero-repo install from GHCR (lightest)
+
+Prebuilt multi-arch (amd64/arm64) images for **both** backend and frontend — no `git clone`:
 
 ```bash
 curl -O https://raw.githubusercontent.com/brokermr810/QuantDinger/main/docker-compose.ghcr.yml
 curl -o backend.env https://raw.githubusercontent.com/brokermr810/QuantDinger/main/backend_api_python/env.example
+docker compose -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
@@ -383,11 +422,12 @@ Use **Docker Desktop** (WSL2 backend recommended). From PowerShell in the repo r
 
 ```powershell
 git clone https://github.com/brokermr810/QuantDinger.git
-cd QuantDinger
+Set-Location QuantDinger
 Copy-Item backend_api_python\env.example -Destination backend_api_python\.env
 $key = py -c "import secrets; print(secrets.token_hex(32))"
 (Get-Content backend_api_python\.env) -replace '^SECRET_KEY=.*$', "SECRET_KEY=$key" | Set-Content backend_api_python\.env -Encoding UTF8
-docker-compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 If `py` is not on PATH, use `python` or `python3` in the one-liner that generates `$key`. Line endings should remain UTF-8; avoid editors that strip newlines from `.env`.
@@ -396,7 +436,9 @@ If `py` is not on PATH, use `python` or `python3` in the one-liner that generate
 
 | Symptom | What to check |
 |---------|----------------|
-| Backend exits immediately | `SECRET_KEY` still default, or invalid `.env` syntax. Read `docker-compose logs backend`. |
+| `QuantDinger-Vue` not found | You used `--build` without cloning Vue source. Use `docker compose up -d` (no `--build`) or clone into `./QuantDinger-Vue/` first. |
+| `redis` / `python` / `node` pull fails, `content size of zero` | Docker Hub unreachable from Docker Desktop. Set root `.env` `IMAGE_PREFIX=docker.m.daocloud.io/library/` and/or configure **Docker Desktop → Proxies** (system VPN alone is often not enough). |
+| Backend exits immediately | `SECRET_KEY` still default, or invalid `.env` syntax. Read `docker compose logs backend`. |
 | Blank page or API errors from browser | `FRONTEND_URL` / origins mismatch; API not reachable from the host you opened. |
 | Port already in use | Another Postgres, Redis, or local service on `5432` / `6379` / `5000` / `8888`. Adjust variables in root `.env` per `docker-compose.yml`. |
 | Many live strategies, “start denied” | Raise `STRATEGY_MAX_THREADS` in `backend_api_python/.env` and restart API (see comments in `env.example`). |
@@ -404,11 +446,13 @@ If `py` is not on PATH, use `python` or `python3` in the one-liner that generate
 ### Common Docker commands
 
 ```bash
-docker-compose ps
-docker-compose logs -f backend
-docker-compose restart backend
-docker-compose up -d --build
-docker-compose down
+docker compose ps
+docker compose logs -f backend
+docker compose restart backend
+docker compose pull
+docker compose up -d
+docker compose up -d --build backend   # backend code changes only
+docker compose down
 ```
 
 ### Optional root `.env` (Compose only)
@@ -521,12 +565,8 @@ QuantDinger/
 │   ├── migrations/init.sql  # Database initialization
 │   ├── env.example          # Main environment template
 │   └── Dockerfile
-├── frontend/                # Prebuilt web UI (sources: QuantDinger-Vue; mobile app: QuantDinger-Mobile)
-│   ├── dist/
-│   ├── Dockerfile
-│   └── nginx.conf
 ├── docs/                    # Product, strategy, and deployment documentation
-├── docker-compose.yml
+├── docker-compose.yml       # Web UI via GHCR; optional ./QuantDinger-Vue/ for local UI builds
 ├── LICENSE
 └── TRADEMARKS.md
 ```

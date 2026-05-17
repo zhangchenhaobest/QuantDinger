@@ -80,22 +80,32 @@
 
 ## 两分钟试用
 
-> **三步：`git clone → 写一个密钥 → docker compose up`。** macOS/Linux 就是**一行命令**。下文 90% 都是参考详情，新手不用全读。
+> **最轻量：先 `pull` 再 `up`，不要 `docker compose up --build`。** 前端用 GHCR 预构建镜像（默认 `3.0.10`），无需 Node、无需 `QuantDinger-Vue` 目录；仅后端在首次启动时本地构建。
 
-**前置条件：** 已安装带 Compose 的 [Docker](https://docs.docker.com/get-docker/)（Windows/macOS 用 Docker Desktop，Linux 用 Docker Engine + Compose 插件）以及 **Git**。**不需要安装 Node.js** —— 前端镜像直接从 GHCR 拉取。
+**前置条件：** [Docker](https://docs.docker.com/get-docker/) + Compose v2（Windows/macOS 用 Docker Desktop）。标准路径需要 **Git**。**不需要 Node.js**。
 
-### macOS / Linux（Bash）—— 一行命令
+### 最轻：两个文件（无需 `git clone`）
+
+能访问 GHCR 与 Docker Hub（或镜像加速）时：
 
 ```bash
-git clone https://github.com/brokermr810/QuantDinger.git && cd QuantDinger && cp backend_api_python/env.example backend_api_python/.env && chmod +x scripts/generate-secret-key.sh && ./scripts/generate-secret-key.sh && docker-compose up -d --build
+curl -O https://raw.githubusercontent.com/brokermr810/QuantDinger/main/docker-compose.ghcr.yml
+curl -o backend.env https://raw.githubusercontent.com/brokermr810/QuantDinger/main/backend_api_python/env.example
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-若系统没有 `docker-compose` 命令，可尝试 `docker compose`（Compose V2）。
+首次启动会自动生成 `SECRET_KEY`。打开 **`http://localhost:8888`**。
 
-<details>
-<summary><b>Windows（PowerShell）</b> —— 点击展开</summary>
+### 标准：克隆本仓库（便于改配置与看文档）
 
-请在 **PowerShell**（不要用 CMD）中操作，并先启动 **Docker Desktop**（建议开启 WSL2 后端）。
+**macOS / Linux（Bash）一行命令**
+
+```bash
+git clone https://github.com/brokermr810/QuantDinger.git && cd QuantDinger && cp backend_api_python/env.example backend_api_python/.env && chmod +x scripts/generate-secret-key.sh && ./scripts/generate-secret-key.sh && docker compose pull && docker compose up -d
+```
+
+**Windows（PowerShell）** —— `git clone` 后目录名为 **`QuantDinger`**（与 GitHub 仓库一致；不区分大小写时 `cd quantdinger` 也可）：
 
 ```powershell
 git clone https://github.com/brokermr810/QuantDinger.git
@@ -104,22 +114,45 @@ Copy-Item backend_api_python\env.example -Destination backend_api_python\.env
 $key = & python -c "import secrets; print(secrets.token_hex(32))" 2>$null
 if (-not $key) { $key = & py -c "import secrets; print(secrets.token_hex(32))" 2>$null }
 if (-not $key) { $key = & python3 -c "import secrets; print(secrets.token_hex(32))" 2>$null }
-if (-not $key) { Write-Error "请安装 Python 3（安装时勾选 Add to PATH），或安装 Git for Windows 后使用下方 Git Bash + macOS/Linux 命令。" }
+if (-not $key) { Write-Error "请安装 Python 3（勾选 Add to PATH），或使用 Git Bash 运行上方 Bash 一行命令。" }
 (Get-Content backend_api_python\.env) -replace '^SECRET_KEY=.*$', "SECRET_KEY=$key" | Set-Content backend_api_python\.env -Encoding utf8
-docker-compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-若提示找不到 `docker-compose`，请改用 **`docker compose`**（中间为空格）。若未安装 Git，请安装 [Git for Windows](https://git-scm.com/download/win)。
+请用 **`docker compose`**（空格）；旧版 **`docker-compose`** 亦可。已装 **Git Bash** 可直接跑 Bash 一行命令。
 
-**更简单的办法：** 若已安装 **Git for Windows**，打开 **Git Bash**，直接复制上方 macOS/Linux 的一行命令即可，无需手写 PowerShell。
+<details>
+<summary><b>日常安装不要用 <code>docker compose up --build</code></b></summary>
+
+`--build` 会强制从 **`./QuantDinger-Vue/`** 构建前端，本仓库不包含该目录，会报 `QuantDinger-Vue not found`，并额外拉取 `node:18-alpine` 等基础镜像。
+
+| 目的 | 命令 |
+|------|------|
+| 首次 / 日常启动 | `docker compose pull` → `docker compose up -d` |
+| 只改了后端代码 | `docker compose up -d --build backend` |
+| 二开 Vue 前端 | 将 [QuantDinger-Vue](https://github.com/brokermr810/QuantDinger-Vue) 克隆到 `./QuantDinger-Vue/` 后再 `docker compose up -d --build` |
+
+</details>
+
+<details>
+<summary><b><code>docker pull</code> 很慢或失败（国内 / VPN）</b></summary>
+
+系统 VPN **通常不会**代理 Docker Desktop。请在 **Docker Desktop → 设置 → Proxies** 填写本地代理（如 Clash `http://127.0.0.1:7890`），或在**仓库根目录** `.env` 增加：
+
+```ini
+IMAGE_PREFIX=docker.m.daocloud.io/library/
+```
+
+再执行 `docker compose pull`。`content size of zero`、`connectex` 访问 `registry-1.docker.io` 失败等，属于镜像仓库网络问题，不是业务代码错误。
 
 </details>
 
 ---
 
-启动后打开 **`http://localhost:8888`**，使用 **`quantdinger` / `123456`** 登录，并在任何真实业务前**修改默认管理员密码**。完事——可以开始用了。
+打开 **`http://localhost:8888`**，默认 **`quantdinger` / `123456`** 登录，正式使用前请**修改管理员密码**。
 
-需要逐项配置、首次自检、排错说明，再去看下文 **[安装与首次运行](#安装与首次运行)**（其他人可跳过）。
+更多步骤与排错见 **[安装与首次运行](#安装与首次运行)**。
 
 ## 相关仓库
 
@@ -315,18 +348,24 @@ cp backend_api_python/env.example backend_api_python/.env
 ### 4）启动
 
 ```bash
-docker-compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
-默认服务：**`postgres`**、**`redis`**、**`backend`**、**`frontend`**（详见仓库根目录 `docker-compose.yml` 与健康检查）。
+- **`frontend`**：拉取 `ghcr.io/brokermr810/quantdinger-frontend:3.0.10`，无需本地 Vue 目录。
+- **`backend`**：首次若无本地镜像，会从 `./backend_api_python` 自动构建。
+- **不要**使用 `docker compose up -d --build`，除非已在 `./QuantDinger-Vue/` 放置前端源码。
 
-#### 备选方案：零仓库安装（GHCR 预构建镜像）
+默认服务：**`postgres`**、**`redis`**、**`backend`**、**`frontend`**。
 
-如果不想 clone 整个仓库，可使用 GHCR 变体——后端和前端都是预构建的多架构（amd64/arm64）镜像：
+#### 备选方案：零仓库安装（最轻，GHCR 预构建）
+
+后端与前端均为预构建多架构（amd64/arm64）镜像，无需 `git clone`：
 
 ```bash
 curl -O https://raw.githubusercontent.com/brokermr810/QuantDinger/main/docker-compose.ghcr.yml
 curl -o backend.env https://raw.githubusercontent.com/brokermr810/QuantDinger/main/backend_api_python/env.example
+docker compose -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
@@ -388,7 +427,9 @@ AI 分析、自然语言生成代码等需至少配置一个 LLM 供应商。打
 
 | 现象 | 排查 |
 |------|------|
-| backend 立刻退出 | `SECRET_KEY` 仍为默认值，或 `.env` 语法错误；查看 `docker-compose logs backend`。 |
+| `QuantDinger-Vue` 路径不存在 | 误用了 `--build` 且未克隆 Vue 仓；改用 `docker compose up -d`，或先克隆到 `./QuantDinger-Vue/`。 |
+| 拉取 `redis`/`python`/`node` 失败、`content size of zero` | Docker 未走代理或镜像站异常；根目录 `.env` 设 `IMAGE_PREFIX=docker.m.daocloud.io/library/`，并在 Docker Desktop 配置 Proxies。 |
+| backend 立刻退出 | `SECRET_KEY` 仍为默认值，或 `.env` 语法错误；`docker compose logs backend`。 |
 | 浏览器打不开或 API 报错 | `FRONTEND_URL` / 访问域名不一致；本机防火墙或未映射端口。 |
 | 端口被占用 | 本机已有其他 Postgres/Redis/5000/8888 服务；调整根目录 `.env` 中对应变量。 |
 | 大量实盘策略提示无法启动 | 提高 `backend_api_python/.env` 中 `STRATEGY_MAX_THREADS` 并重启 API（见 `env.example` 注释）。 |
@@ -396,11 +437,13 @@ AI 分析、自然语言生成代码等需至少配置一个 LLM 供应商。打
 ### 常用 Docker 命令
 
 ```bash
-docker-compose ps
-docker-compose logs -f backend
-docker-compose restart backend
-docker-compose up -d --build
-docker-compose down
+docker compose ps
+docker compose logs -f backend
+docker compose restart backend
+docker compose pull
+docker compose up -d
+docker compose up -d --build backend   # 仅后端改代码后
+docker compose down
 ```
 
 ### 可选：仓库根目录 `.env`（仅 Compose）
